@@ -5,19 +5,25 @@ import argparse
 import numpy as np
 import pickle as pkl
 
+import torch
+
 from multiprocess import Pool
 
-sys.path.append("/home/lyf/Desktop/FWA/algorithms")
-import dynFWA
+# import algorithms
+from algorithms.BBFWA import BBFWA
+from algorithms.dynFWA import dynFWA
+from algorithms.LoTFWA import LoTFWA
+from algorithms.pytorch.BBFWA import BBFWA as BBFWA_torch 
 
-sys.path.append("/home/lyf/Desktop/FWA/benchmarks")
+# import benchmark
+sys.path.append("/home/lyf/Desktop/fireworks_algorithms/benchmarks")
 from benchmark_wrapper import Benchmark
 
 def parsing():
     
     # experiment setting
     parser = argparse.ArgumentParser(description='Baseline runs of dynFWA')
-    parser.add_argument('--alg_name', default='dynFWA', help='Algorithm Name')
+    parser.add_argument('--alg_name', default='BBFWA', help='Algorithm Name')
     parser.add_argument('--benchmark', default='CEC17', help='Benchmark Name')
     parser.add_argument('--multiprocess', default=False, action='store_true', help='Whether apply multiprocess.')
     parser.add_argument('--repetition', default=50, type=int, help='Repetition times')
@@ -28,8 +34,18 @@ def parsing():
 def single_opt(pack):
     
     funcs, func_id, args = pack
+    
+    if args.alg_name == 'BBFWA':
+        model = BBFWA()
+    elif args.alg_name == 'dynFWA':
+        model = dynFWA()
+    elif args.alg_name == 'LoTFWA':
+        model = LoTFWA()
+    elif args.alg_name == 'BBFWA_torch':
+        model = BBFWA_torch()
+    else:
+        raise Exception("Algorithm not implemented!")
 
-    model = dynFWA.dynFWA()
     model.load_prob(evaluator=funcs[func_id],
                     dim=args.dim,
                     max_eval=args.dim*10000)
