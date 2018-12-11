@@ -133,7 +133,7 @@ class BBFWA(object):
 
     def _explode(self, fireworks, fits):
         
-        bias = torch.rand([self.sp_size, self.dim])*self._dyn_amp
+        bias = (2*torch.rand([self.sp_size, self.dim])-1)*self._dyn_amp
         rand_samples = torch.rand((self.sp_size, self.dim))*(self.upper_bound - self.lower_bound) + self.lower_bound
         e_sparks = fireworks + bias
         in_bound = (e_sparks > self.lower_bound) * (e_sparks < self.upper_bound)

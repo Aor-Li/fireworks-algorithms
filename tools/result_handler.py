@@ -8,7 +8,8 @@ from prettytable import PrettyTable
 
 # data
 # benchmark optimal
-
+bias13 = list(range(-1400, 0, 100)) + list(range(100, 1500, 100))
+bias17 = list(range(100, 3100, 100))
 
 def load_result(*raw_paths):
     """
@@ -61,6 +62,16 @@ def stats_compare(*paths, **kwargs):
     stds = [_.std(axis=1).tolist() for _ in res]
     times = [_.mean(axis=1).tolist() for _ in cst]
     
+    # remove bias
+    benchmark_name  = prob.split('_')[0]
+    print(benchmark_name, benchmark_name == 'CEC17')
+    if benchmark_name == 'CEC13':
+        for idx in range(len(means)):
+            means[idx] = [_[0] - _[1] for _ in zip(means[idx], bias13)]
+    elif benchmark_name == 'CEC17':
+        for idx in range(len(means)):
+            means[idx] = [_[0] - _[1] for _ in zip(means[idx], bias17)]
+
     # benchmark num
     benchmark_num = len(means[0])
 
@@ -91,7 +102,7 @@ def stats_compare(*paths, **kwargs):
                    '{:.3e}'.format(stds[1][idx]),
                    '{:.2f}'.format(p_values[idx]),
                    signs[idx],]
-            if row[-1] == '+':
+            if row[-1] != '=':
                 for idx in range(5):
                     row[idx] = '\033[1m' + row[idx] + '\033[0m'
             tb.add_row(row)
