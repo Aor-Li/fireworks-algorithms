@@ -14,6 +14,7 @@ from algorithms.BBFWA import BBFWA
 from algorithms.dynFWA import dynFWA
 from algorithms.LoTFWA import LoTFWA
 from algorithms.pytorch.BBFWA import BBFWA as BBFWA_torch 
+from algorithms.pytorch.SRBBFWA import SRBBFWA as SRBBFWA_torch
 
 # import benchmark
 sys.path.append("/home/lyf/Desktop/fireworks_algorithms/benchmarks")
@@ -26,6 +27,7 @@ def parsing():
     parser.add_argument('--alg_name', default='BBFWA', help='Algorithm Name')
     parser.add_argument('--benchmark', default='CEC17', help='Benchmark Name')
     parser.add_argument('--multiprocess', default=False, action='store_true', help='Whether apply multiprocess.')
+    parser.add_argument('--disable-cuda', action='store_true', help='Disable CUDA')
     parser.add_argument('--repetition', default=50, type=int, help='Repetition times')
     parser.add_argument('--dim', default=30, type=int, help='Dim of fitness function')
 
@@ -43,12 +45,16 @@ def single_opt(pack):
         model = LoTFWA()
     elif args.alg_name == 'BBFWA_torch':
         model = BBFWA_torch()
+    elif args.alg_name == 'SRBBFWA_torch':
+        model = SRBBFWA_torch()
+
     else:
         raise Exception("Algorithm not implemented!")
 
     model.load_prob(evaluator=funcs[func_id],
                     dim=args.dim,
-                    max_eval=args.dim*10000)
+                    max_eval=args.dim*10000,
+                    disable_cuda=args.disable_cuda,)
     min_val, cost_time = model.run()
     print("Prob.{:<4}, res:{:.4e},\t time:{:.3f}".format(func_id+1, min_val, cost_time))
     return min_val, cost_time

@@ -20,7 +20,7 @@ def func_wrapper(func, func_id):
             dim = origin_shape[-1]
         
             if origin_type is torch.Tensor:
-                x = x.numpy()
+                x = x.cpu().numpy()
             x = x.reshape((-1, dim)).tolist()
 
         if func == "cec13":
