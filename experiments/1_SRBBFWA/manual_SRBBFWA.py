@@ -1,5 +1,6 @@
 import os
 import time
+import copy
 import numpy as np
 
 import torch
@@ -21,7 +22,7 @@ class GPModel(gpytorch.models.ExactGP):
         covar_x = self.covar_module(x)
         return gpytorch.distributions.MultivariateNormal(mean_x, covar_x)
 
-class SRBBFWA(object):
+class ManualSRBBFWA(object):
 
     def __init__(self):
         # Parameters
@@ -56,6 +57,7 @@ class SRBBFWA(object):
         # for inspection
         self.time = None
         self.info = None
+        self.traj = None
 
     def load_prob(self,
                   # params for prob
@@ -106,6 +108,7 @@ class SRBBFWA(object):
         self.time = 0
         self.gp_train_time = 0
         self.info = {}
+        self.traj = []
 
         # init random seed
         np.random.seed(int(os.getpid()*time.clock()))
@@ -125,7 +128,7 @@ class SRBBFWA(object):
 
         self.time = time.time() - begin_time
 
-        return self.best_fit, self.time
+        return self.best_fit, self.time, self.traj
 
     def _init_fireworks(self):
 
@@ -138,6 +141,10 @@ class SRBBFWA(object):
         self.likelihood = gpytorch.likelihoods.GaussianLikelihood().to(device=self.device)
         self.gpr = GPModel(torch.zeros(size=(1, self.dim)).to(device=self.device), fits, self.likelihood).to(device=self.device)
         
+        self.gpr.covar_module.initialize(log_outputscale=4.6)
+        self.gpr.covar_module.base_kernel.initialize(log_lengthscale=0)
+        self.likelihood.initialize(log_noise=1)
+
         return fireworks, fits
     
     def _terminate(self):
@@ -159,12 +166,15 @@ class SRBBFWA(object):
             self._dyn_amp *= 1.2
         else:
             self._dyn_amp *= 0.9
+        if self._dyn_amp < 1e-6:
+            self._dyn_amp = 1
 
         self._num_iter += 1
         self._num_eval += len(e_sparks)
 
         self.best_idv = n_fireworks[0]
         self.best_fit = n_fits.cpu().numpy()[0]
+        self.traj.append(copy.deepcopy(self.best_fit))
 
         fireworks = n_fireworks
         fits = n_fits
@@ -201,53 +211,10 @@ class SRBBFWA(object):
         self._gp_amp = self._dyn_amp
         gp_input = (e_sparks - self._gp_mean) / self._gp_amp
 
-        # train gpr
+        # change data and mean
         self.gpr.set_train_data(gp_input, e_fits, strict=False)
+        self.gpr.mean_module.initialize(constant=torch.mean(e_fits).item())
         
-        '''
-        print('Before Train')
-        print('Hyperparameters')
-        for name, param in self.gpr.named_hyperparameters():
-            print(name, param)
-        print('Params')
-        for params in self.gpr.parameters():
-            print(params)
-        '''
-        self.likelihood.train()
-        self.gpr.train()
-
-        optimizer = torch.optim.Adam([
-            {'params': self.gpr.parameters()},
-        ], lr=0.001)
-        mll = gpytorch.mlls.ExactMarginalLogLikelihood(self.likelihood, self.gpr)
-        
-        t0 = time.time()
-        try:
-            for i in range(self.gp_train_iter):
-                optimizer.zero_grad()
-                output = self.gpr(gp_input)
-                loss = -mll(output, e_fits)
-                loss.backward()
-                optimizer.step()
-        except:
-            for params in self.gpr.parameters():
-                print(params)
-            for params in self.likelihood.parameters():
-                print(params)
-            raise Exception('!!!')
-
-        self.gp_train_time += time.time() - t0
-        
-        '''
-        print('After Train')
-        print('Hyperparameters')
-        for name, param in self.gpr.named_hyperparameters():
-            print(name, param)
-        print('Params')
-        for params in self.gpr.parameters():
-            print(params)
-        '''
-
         return e_sparks, e_fits
 
     def _select(self, fireworks, fits, e_sparks, e_fits):

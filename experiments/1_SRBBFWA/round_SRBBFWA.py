@@ -1,5 +1,6 @@
 import os
 import time
+import copy
 import numpy as np
 
 import torch
@@ -21,7 +22,7 @@ class GPModel(gpytorch.models.ExactGP):
         covar_x = self.covar_module(x)
         return gpytorch.distributions.MultivariateNormal(mean_x, covar_x)
 
-class SRBBFWA(object):
+class RoundSRBBFWA(object):
 
     def __init__(self):
         # Parameters
@@ -56,6 +57,7 @@ class SRBBFWA(object):
         # for inspection
         self.time = None
         self.info = None
+        self.traj = None
 
     def load_prob(self,
                   # params for prob
@@ -85,7 +87,7 @@ class SRBBFWA(object):
         self.init_amp = init_amp
 
         self.sample_size = sp_size * 10
-        self.gp_train_iter = 1
+        self.gp_train_iter = 50
         if not disable_cuda and torch.cuda.is_available():
             self.device = torch.device('cuda')
         else:
@@ -106,6 +108,7 @@ class SRBBFWA(object):
         self.time = 0
         self.gp_train_time = 0
         self.info = {}
+        self.traj = []
 
         # init random seed
         np.random.seed(int(os.getpid()*time.clock()))
@@ -125,7 +128,7 @@ class SRBBFWA(object):
 
         self.time = time.time() - begin_time
 
-        return self.best_fit, self.time
+        return self.best_fit, self.time, self.traj
 
     def _init_fireworks(self):
 
@@ -159,12 +162,15 @@ class SRBBFWA(object):
             self._dyn_amp *= 1.2
         else:
             self._dyn_amp *= 0.9
+        if self._dyn_amp < 1e-6:
+            self._dyn_amp = 1
 
         self._num_iter += 1
         self._num_eval += len(e_sparks)
 
         self.best_idv = n_fireworks[0]
         self.best_fit = n_fits.cpu().numpy()[0]
+        self.traj.append(copy.deepcopy(self.best_fit))
 
         fireworks = n_fireworks
         fits = n_fits
@@ -204,49 +210,21 @@ class SRBBFWA(object):
         # train gpr
         self.gpr.set_train_data(gp_input, e_fits, strict=False)
         
-        '''
-        print('Before Train')
-        print('Hyperparameters')
-        for name, param in self.gpr.named_hyperparameters():
-            print(name, param)
-        print('Params')
-        for params in self.gpr.parameters():
-            print(params)
-        '''
-        self.likelihood.train()
-        self.gpr.train()
+        if self._num_iter % 100 == 0:
+            self.likelihood.train()
+            self.gpr.train()
 
-        optimizer = torch.optim.Adam([
-            {'params': self.gpr.parameters()},
-        ], lr=0.001)
-        mll = gpytorch.mlls.ExactMarginalLogLikelihood(self.likelihood, self.gpr)
+            optimizer = torch.optim.Adam([
+                {'params': self.gpr.parameters()},
+            ], lr=0.001)
+            mll = gpytorch.mlls.ExactMarginalLogLikelihood(self.likelihood, self.gpr)
         
-        t0 = time.time()
-        try:
             for i in range(self.gp_train_iter):
                 optimizer.zero_grad()
                 output = self.gpr(gp_input)
                 loss = -mll(output, e_fits)
                 loss.backward()
                 optimizer.step()
-        except:
-            for params in self.gpr.parameters():
-                print(params)
-            for params in self.likelihood.parameters():
-                print(params)
-            raise Exception('!!!')
-
-        self.gp_train_time += time.time() - t0
-        
-        '''
-        print('After Train')
-        print('Hyperparameters')
-        for name, param in self.gpr.named_hyperparameters():
-            print(name, param)
-        print('Params')
-        for params in self.gpr.parameters():
-            print(params)
-        '''
 
         return e_sparks, e_fits
 

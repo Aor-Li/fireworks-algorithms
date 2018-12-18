@@ -1,5 +1,6 @@
 import os
 import time
+import copy
 import numpy as np
 
 import torch
@@ -21,7 +22,7 @@ class GPModel(gpytorch.models.ExactGP):
         covar_x = self.covar_module(x)
         return gpytorch.distributions.MultivariateNormal(mean_x, covar_x)
 
-class SRBBFWA(object):
+class BasicSRBBFWA(object):
 
     def __init__(self):
         # Parameters
@@ -56,6 +57,7 @@ class SRBBFWA(object):
         # for inspection
         self.time = None
         self.info = None
+        self.traj = None
 
     def load_prob(self,
                   # params for prob
@@ -106,6 +108,7 @@ class SRBBFWA(object):
         self.time = 0
         self.gp_train_time = 0
         self.info = {}
+        self.traj = []
 
         # init random seed
         np.random.seed(int(os.getpid()*time.clock()))
@@ -125,7 +128,7 @@ class SRBBFWA(object):
 
         self.time = time.time() - begin_time
 
-        return self.best_fit, self.time
+        return self.best_fit, self.time, self.traj
 
     def _init_fireworks(self):
 
@@ -165,6 +168,7 @@ class SRBBFWA(object):
 
         self.best_idv = n_fireworks[0]
         self.best_fit = n_fits.cpu().numpy()[0]
+        self.traj.append(copy.deepcopy(self.best_fit))
 
         fireworks = n_fireworks
         fits = n_fits
